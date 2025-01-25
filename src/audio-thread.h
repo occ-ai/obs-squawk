@@ -43,14 +43,26 @@ public:
 		// Lock the mutex
 		std::lock_guard<std::mutex> lock(mutex);
 
+		if (interrupt_mode) {
+			// Clear the buffer if in interrupt mode
+			buffer.clear();
+		}
+
 		// Push audio samples to the buffer
 		for (auto sample : samples) {
 			buffer.push_back(sample);
 		}
 	}
 
+	void setSampleRate(int sample_rate_) { sample_rate = sample_rate_; }
+	void setTargetBatchSizeMs(int target_batch_size_ms)
+	{
+		TARGET_BATCH_SIZE_MS = target_batch_size_ms;
+	}
+	void setInterruptMode(bool interrupt_mode_) { interrupt_mode = interrupt_mode_; }
+
 private:
-	const int TARGET_BATCH_SIZE_MS = 50;
+	int TARGET_BATCH_SIZE_MS = 50;
 
 	std::deque<float> buffer;
 	std::mutex mutex;
@@ -58,6 +70,7 @@ private:
 	obs_source_t *context;
 	int sample_rate = 22050;
 	std::atomic<bool> running = false;
+	bool interrupt_mode = false;
 
 	void run();
 	void emitFromBuffer();

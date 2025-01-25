@@ -24,13 +24,15 @@ void AudioThread::run()
 			emitFromBuffer();
 		}
 
-		// Perform the operation to be timed
-		auto end = std::chrono::high_resolution_clock::now();
-		auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+		// Calculate the time taken to process the audio samples
+		const auto end = std::chrono::high_resolution_clock::now();
+		const auto duration =
+			std::chrono::duration_cast<std::chrono::milliseconds>(end - start);
+		const auto sleep_duration_ms =
+			std::chrono::milliseconds(TARGET_BATCH_SIZE_MS) - duration;
 
 		// Sleep for [TARGET_BATCH_SIZE_MS] minus the time taken to process the audio samples
-		std::this_thread::sleep_for(std::chrono::milliseconds(TARGET_BATCH_SIZE_MS) -
-					    duration);
+		std::this_thread::sleep_for(sleep_duration_ms);
 	}
 }
 
@@ -39,14 +41,21 @@ void AudioThread::emitFromBuffer()
 	// Lock the mutex
 	std::lock_guard<std::mutex> lock(mutex);
 
-	// Get 20ms audio samples from the buffer
+	const int target_number_of_samples = TARGET_BATCH_SIZE_MS * sample_rate / 1000;
+
+	// Get audio samples from the buffer
 	std::vector<float> samples;
-	for (int i = 0; i < TARGET_BATCH_SIZE_MS * sample_rate / 1000; i++) {
+	for (int i = 0; i < target_number_of_samples; i++) {
 		if (this->buffer.empty()) {
 			break;
 		}
 		samples.push_back(this->buffer.front());
 		this->buffer.pop_front();
+	}
+
+	// if needed - pad the samples with silence to reach the target batch size
+	while ((int)samples.size() < target_number_of_samples) {
+		samples.push_back(0.0f);
 	}
 
 	// Emit audio samples

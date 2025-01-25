@@ -74,6 +74,9 @@ void ModelDownloader::close()
 {
 	this->mPrepareToClose = true;
 
+	// Stop the thread
+	this->download_thread->quit();
+
 	QDialog::close();
 }
 
@@ -231,7 +234,9 @@ ModelDownloader::~ModelDownloader()
 		}
 		delete this->download_thread;
 	}
-	delete this->download_worker;
+	if (this->download_worker != nullptr) {
+		delete this->download_worker;
+	}
 }
 
 ModelDownloadWorker::~ModelDownloadWorker()

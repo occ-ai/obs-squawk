@@ -78,6 +78,8 @@ void squawk_source_defaults(obs_data_t *settings)
 	obs_data_set_default_bool(settings, "line_by_line", false);
 	obs_data_set_default_bool(settings, "phonetic_transcription", true);
 	obs_data_set_default_bool(settings, "input_debounce", true);
+	obs_data_set_default_bool(settings, "interrupt_mode", false);
+	obs_data_set_default_int(settings, "latency", 50);
 }
 
 bool add_sources_to_list(void *list_property, obs_source_t *source)
@@ -200,15 +202,42 @@ obs_properties_t *squawk_source_properties(void *data)
 					original_text.c_str(), text.c_str());
 			}
 
-			generate_audio_from_text(squawk_data_->tts_context, text, speaker_id,
-						 squawk_data_->speed);
+			std::thread audio_gen_thread([squawk_data_, text, speaker_id]() {
+				generate_audio_from_text(squawk_data_->tts_context, text,
+							 speaker_id, squawk_data_->speed);
+			});
+			audio_gen_thread.detach();
 
 			return true;
 		});
 
+	// add advanced settings group
+	obs_properties_t *advanced_group = obs_properties_create();
+	obs_properties_add_group(ppts, "advanced", MT_("Advanced"), OBS_GROUP_NORMAL,
+				 advanced_group);
+
+	// add boolean propery for enabling phonetic transcription
+	obs_properties_add_bool(advanced_group, "phonetic_transcription",
+				MT_("Phonetic_Transcription"));
+	// add info desxription for phonetic transcription
+	obs_property_set_long_description(obs_properties_get(advanced_group,
+							     "phonetic_transcription"),
+					  MT_("phonetic_transcription_help"));
+
+	// add boolean property for enabling interrupt mode
+	obs_properties_add_bool(advanced_group, "interrupt_mode", MT_("Interrupt_Mode"));
+	// add info description for interrupt mode
+	obs_property_set_long_description(obs_properties_get(advanced_group, "interrupt_mode"),
+					  MT_("interrupt_mode_help"));
+
+	// add int slider for setting the latency
+	obs_properties_add_int_slider(advanced_group, "latency", MT_("Latency"), 10, 250, 10);
+	obs_property_set_long_description(obs_properties_get(advanced_group, "latency"),
+					  MT_("latency_help"));
+
 	// add button for deleting all cached models
 	obs_properties_add_button(
-		ppts, "delete_models", MT_("Delete_Cached_Models"),
+		advanced_group, "delete_models", MT_("Delete_Cached_Models"),
 		[](obs_properties_t *props, obs_property_t *property, void *data_) {
 			UNUSED_PARAMETER(props);
 			UNUSED_PARAMETER(property);
@@ -224,9 +253,6 @@ obs_properties_t *squawk_source_properties(void *data)
 			obs_data_release(settings);
 			return true;
 		});
-
-	// add boolean propery for enabling phonetic transcription
-	obs_properties_add_bool(ppts, "phonetic_transcription", MT_("Phonetic_Transcription"));
 
 	// add plugin info
 	char small_info[256];
@@ -268,6 +294,9 @@ void squawk_source_update(void *data, obs_data_t *settings)
 		init_sherpa_tts_context(squawk_data->tts_context, audio_samples_callback,
 					squawk_data);
 	}
+
+	squawk_data->audioThread->setTargetBatchSizeMs((int)obs_data_get_int(settings, "latency"));
+	squawk_data->audioThread->setInterruptMode(obs_data_get_bool(settings, "interrupt_mode"));
 }
 
 void squawk_source_activate(void *data)
